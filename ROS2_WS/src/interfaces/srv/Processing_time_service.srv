@@ -1,0 +1,4 @@
+int64 station_id
+int64 carrier_id
+---
+int64 processing_time
