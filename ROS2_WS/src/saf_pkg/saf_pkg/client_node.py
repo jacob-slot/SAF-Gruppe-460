@@ -1,37 +1,76 @@
 import sys
-
-from example_interfaces.srv import AddTwoInts
+import socket
+from interfaces.srv import ProcessingTimeService
 import rclpy
 from rclpy.node import Node
 
+host='172.20.66.159'
+port=10
 
-class MinimalClientAsync(Node):
+class Client(Node):
 
     def __init__(self):
-        super().__init__('minimal_client_async')
-        self.cli = self.create_client(AddTwoInts, 'add_two_ints')
-        while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service not available, waiting again...')
-        self.req = AddTwoInts.Request()
+        super().__init__('client_node')
 
-    def send_request(self, a, b):
-        self.req.a = a
-        self.req.b = b
-        return self.cli.call_async(self.req)
+        self.client = self.create_client(ProcessingTimeService, 'get_processing_time')
+
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        
+        self.request = ProcessingTimeService.Request()
+
+        # start TCP server
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, port))
+            s.listen()
+            print(f"Server listening on {host}:{port}")
+            conn, addr = s.accept()
+            with conn:
+                print(f"Connected by {addr}")
+                while True:
+                    
+                    # if connection is broken, break
+                    if not conn:
+                        print("Connection broken")
+                        break
+
+                    # receive string data from the client and save as xml file
+                    data = conn.recv(1024)
+                    
+                    # remove all characters after </data> tag
+                    data = data[:data.find(b'</data>')+7]
+                    
+                    print("Received:", data)
+                    with open("data.xml", "wb") as f:
+                        f.write(data)
+                    
+                    station_id = int(data[data.find(b'<station_id>')+12:data.find(b'</station_id>')].decode('utf-8'))
+                    print("Station ID:", station_id)
+
+                    carrier_id = int(data[data.find(b'<carrier_id>')+12:data.find(b'</carrier_id>')].decode('utf-8'))
+                    print("Carrier ID:", carrier_id)
+
+                    # send request to service
+                    processing_time = self.send_request(carrier_id, station_id)
+                    
+                    conn.sendall((processing_time).to_bytes(2, byteorder='little', signed=True))
+
+
+
+
+    def send_request(self, carrier_id, station_id):
+        self.request.carrier_id = carrier_id
+        self.request.station_id = station_id
+        return self.client.call_async(self.request)
 
 
 def main():
     rclpy.init()
 
-    minimal_client = MinimalClientAsync()
-    future = minimal_client.send_request(int(sys.argv[1]), int(sys.argv[2]))
-    rclpy.spin_until_future_complete(minimal_client, future)
-    response = future.result()
-    minimal_client.get_logger().info(
-        'Result of add_two_ints: for %d + %d = %d' %
-        (int(sys.argv[1]), int(sys.argv[2]), response.sum))
+    client_node = Client()
+    
+    rclpy.spin(client_node)
 
-    minimal_client.destroy_node()
     rclpy.shutdown()
 
 
