@@ -4,8 +4,8 @@ from interfaces.srv import ProcessingTimeService
 import rclpy
 from rclpy.node import Node
 
-host='172.20.66.159'
-port=10
+host='172.20.66.116'
+port=1030
 
 class Client(Node):
 
@@ -49,11 +49,24 @@ class Client(Node):
 
                     carrier_id = int(data[data.find(b'<carrier_id>')+12:data.find(b'</carrier_id>')].decode('utf-8'))
                     print("Carrier ID:", carrier_id)
+                    
+                    if carrier_id == 0:
+                        print("Carrier ID is 0, skipping...")
+                        carrier_id = 1
 
                     # send request to service
                     processing_time = self.send_request(carrier_id, station_id)
+
+                    # await future object
+                    while not processing_time.done():
+                        rclpy.spin_once(self)
                     
-                    conn.sendall((processing_time).to_bytes(2, byteorder='little', signed=True))
+                    # processing time to int
+                    processing_time = processing_time.result().processing_time
+                    print("Processing time:", processing_time)
+                    
+                    
+                    conn.sendall(processing_time.to_bytes(2, byteorder='little', signed=True))
 
 
 
