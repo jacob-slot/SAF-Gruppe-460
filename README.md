@@ -1,4 +1,4 @@
 # SAF - Gruppe 460
 
-Her laver vi vores SAF miniprojekt.
-Det kan kun blive godt!!
+Dette git-repository indholder et ROS2 workspace med to ROS-pakker, en REACT GUI og et CODESYS projekt til kontrollering af PLC.
+
